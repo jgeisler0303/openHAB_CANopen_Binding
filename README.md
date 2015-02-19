@@ -1,7 +1,7 @@
 # CANopen Binding for openHAB
-This is the very fist Version of of a Binding that allows the connection of [CANopen](http://en.wikipedia.org/wiki/CANopen) devices to the [openHAB server](http://www.openhab.org/) via a [socket can connection](http://en.wikipedia.org/wiki/SocketCAN).
+This is the very fist version of a Binding that allows the connection of [CANopen](http://en.wikipedia.org/wiki/CANopen) devices to the [openHAB server](http://www.openhab.org/) via a [socket can connection](http://en.wikipedia.org/wiki/SocketCAN).
 
-The code is heavily based upon and partly copied from this [socket can binding](https://github.com/agriesser/socketcan-binding-lager) binding.
+The code is heavily based upon and partly copied from this [socket can binding](https://github.com/agriesser/socketcan-binding-lager).
 
 Currently, only reception of PDOs with ```real32``` type data is provided. But the framework is setup and can easily be extended to other data types, sending of PDOs, request and reception of SDOs, sending of sync messages etc.
 
