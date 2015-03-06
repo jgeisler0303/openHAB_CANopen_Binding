@@ -121,7 +121,7 @@ public class SocketConnection implements ISocketConnection {
 	protected void notifyListeners(int canID, boolean rtr, byte[] data) {
 		for (CANMessageReceivedListener listener : listeners) {
 			try {
-				listener.messageReceived(canID, rtr, data);
+				listener.messageReceived(canID, rtr, data, this);
 			} catch (Throwable t) {
 				logger.error("Error in the listener for can frames!", t);
 			}

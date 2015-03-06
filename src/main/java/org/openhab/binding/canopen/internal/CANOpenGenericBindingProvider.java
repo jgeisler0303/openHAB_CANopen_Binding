@@ -9,6 +9,7 @@
 package org.openhab.binding.canopen.internal;
 
 import org.openhab.binding.canopen.CANOpenBindingProvider;
+import org.openhab.core.autoupdate.AutoUpdateBindingProvider;
 import org.openhab.binding.canopen.internal.CANOpenItemConfig;
 import org.openhab.core.items.Item;
 import org.openhab.core.library.items.NumberItem;
@@ -24,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * @author Jens Geisler
  * @since 1.7.0
  */
-public class CANOpenGenericBindingProvider extends AbstractGenericBindingProvider implements CANOpenBindingProvider {
+public class CANOpenGenericBindingProvider extends AbstractGenericBindingProvider implements CANOpenBindingProvider, AutoUpdateBindingProvider {
 	static final Logger logger = LoggerFactory.getLogger(CANOpenGenericBindingProvider.class);
 
 	/**
@@ -75,6 +76,14 @@ public class CANOpenGenericBindingProvider extends AbstractGenericBindingProvide
 	@Override
 	public CANOpenItemConfig getItemConfig(String itemName) {
 		return (CANOpenItemConfig) bindingConfigs.get(itemName);
+	}
+
+	@Override
+	public Boolean autoUpdate(String itemName) {
+		if(getItemConfig(itemName).providesSDO())
+			return false;
+		else
+			return null;
 	}
 
 }

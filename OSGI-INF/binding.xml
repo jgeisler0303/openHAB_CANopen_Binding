@@ -18,7 +18,7 @@
   		<provide interface="org.openhab.core.binding.BindingChangeListener"/>
 	</service>
 
-	<property name="event.topics" type="String" value="openhab/command/*" />
+	<property name="event.topics" type="String" value="openhab/*" />
 	<property name="service.pid" type="String" value="org.openhab.socketcan" />
 
 	<reference bind="setEventPublisher" cardinality="1..1"

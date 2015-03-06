@@ -8,24 +8,33 @@
  */
 package org.openhab.binding.canopen.internal;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Dictionary;
-import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.LinkedList;
-
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.openhab.binding.canopen.CANOpenBindingProvider;
 
+import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.StringUtils;
 import org.openhab.core.binding.AbstractActiveBinding;
 import org.openhab.core.binding.BindingProvider;
 import org.openhab.core.types.Command;
 import org.openhab.core.types.State;
+import org.openhab.core.types.Type;
 import org.osgi.framework.BundleContext;
 import org.osgi.service.cm.ConfigurationException;
 import org.osgi.service.cm.ManagedService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import de.entropia.can.CanSocket.CanId;
 	
 
 /**
@@ -36,7 +45,8 @@ import org.slf4j.LoggerFactory;
  * @since 1.7.0
  */
 public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider> implements ManagedService, CANMessageReceivedListener {
-
+	// TODO refactor protocol types into different Bindings
+	
 	private static final Logger logger = 
 		LoggerFactory.getLogger(CANOpenBinding.class);
 
@@ -48,37 +58,68 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 	private BundleContext bundleContext;
 
 	
+	/**
+	 * used to store events that we have sent ourselves; we need to remember them for not reacting to them
+	 */
+	private List<String> ignoreEventList = new ArrayList<String>();
+
 	/** 
 	 * the refresh interval which is used to poll values from the CANOpen
 	 * server (optional, defaults to 60000ms)
 	 */
 	private long refreshInterval = 60000;
+	private boolean autoStartAll= false;
+	private Set<Integer> autoStartNodes= null;
+
+	private int sdoResponseTimeout= 1000;
+	private Set<String> syncInterfaces= new HashSet<String>();
+	private int syncMaxVal= 0;
+	private int syncVal= 0;
+	// TODO timestamp protocol
 	
-	private Map<Integer, LinkedList<CANOpenItemConfig>> pdoConfigMap= new HashMap<Integer, LinkedList<CANOpenItemConfig>>();
-	private Map<String, Integer> itemPDOMap= new HashMap<String, Integer>();
+	private Map<Integer, LinkedList<CANOpenItemConfig>> pdoConfigMap= new ConcurrentHashMap<Integer, LinkedList<CANOpenItemConfig>>();
+	private Map<String, Integer> itemPDOMap= new ConcurrentHashMap<String, Integer>();
 	
-	public CANOpenBinding() {
-	}
-		
+	private Map<Integer, CANOpenItemConfig> nmtConfigMap= new ConcurrentHashMap<Integer, CANOpenItemConfig>();
+	
+	private Map<Integer, SDODeviceManager> sdoDeviceManagerMap= new ConcurrentHashMap<Integer, SDODeviceManager>();
+
 	
 	public void bindingChanged(BindingProvider provider, String itemName) {
 		super.bindingChanged(provider, itemName);
 		
 		// register as listener!
 		
-		CANOpenItemConfig itemConfig = ((CANOpenBindingProvider) provider).getItemConfig(itemName);
-		if(itemConfig==null) { // Item was removed
+		if(!((CANOpenBindingProvider) provider).providesBindingFor(itemName)) { // Item was removed
+//			logger.debug("removing item " + itemName);
 			// TODO provide for removal of unused sockets
-			LinkedList<CANOpenItemConfig> pdoList= pdoConfigMap.get(itemPDOMap.get(itemName));
-			if(pdoList!=null) {
-				ListIterator<CANOpenItemConfig> iterator= pdoList.listIterator();
-				while(iterator.hasNext()) {
-					if(itemName.equals(iterator.next().getItemName()))
-						iterator.remove();
+			// remove PDO
+			Integer pdoId= itemPDOMap.get(itemName);
+			if(pdoId!=null) {
+				LinkedList<CANOpenItemConfig> pdoList= pdoConfigMap.get(pdoId);
+				if(pdoList!=null) {
+					ListIterator<CANOpenItemConfig> iterator= pdoList.listIterator();
+					while(iterator.hasNext()) {
+						if(itemName.equals(iterator.next().getItemName()))
+							iterator.remove();
+					}
 				}
+				itemPDOMap.remove(itemName);
 			}
-			itemPDOMap.remove(itemName);
+			// remove NMT
+			Iterator<CANOpenItemConfig> configsIterator= nmtConfigMap.values().iterator();
+			while(configsIterator.hasNext()) {
+				if(itemName.equals(configsIterator.next().getItemName()))
+					configsIterator.remove();
+			}
+
+			// remove SDOs
+			for(SDODeviceManager manager: sdoDeviceManagerMap.values()) {
+				if(manager.removeItemName(itemName)) break;
+			}
+
 		} else {
+			CANOpenItemConfig itemConfig = ((CANOpenBindingProvider) provider).getItemConfig(itemName);
 			ISocketConnection conn= null;
 			try {
 				conn = CANOpenActivator.getConnection(itemConfig.getCanInterfaceId());
@@ -92,7 +133,8 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 				initializeItem(conn, itemConfig);
 			}
 			
-			if(itemConfig.providesTxPDO) {
+			// add PDO
+			if(itemConfig.providesTxPDO()) {
 				LinkedList<CANOpenItemConfig> pdoList= pdoConfigMap.get(itemConfig.getPDOId());
 				if(pdoList==null) {
 					pdoList= new LinkedList<CANOpenItemConfig>();
@@ -102,7 +144,22 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 				itemPDOMap.put(itemName, itemConfig.getPDOId());
 			}
 			
-//			logger.debug("added item config " + itemConfig);
+			// add NMT
+			if(itemConfig.providesNMT()) {
+				nmtConfigMap.put(itemConfig.getDeviceID(), itemConfig);
+			}
+			
+			// add SDO
+			if(itemConfig.providesSDO()) {
+				SDODeviceManager manager= sdoDeviceManagerMap.get(itemConfig.getDeviceID());
+				if(manager==null) {
+					manager= new SDODeviceManager(this, sdoResponseTimeout);
+					sdoDeviceManagerMap.put(itemConfig.getDeviceID(), manager);
+				}
+				manager.add(itemConfig);
+			}
+			
+			logger.debug("added item config " + itemConfig);
 		}
 	}
 	
@@ -122,13 +179,15 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 	 */
 	@Override
 	protected void internalReceiveCommand(String itemName, Command command) {
-		logger.debug("internalReceiveCommand() command = "+command.toString());
-		for (CANOpenBindingProvider provider : providers) {
-			if (provider.providesBindingFor(itemName)) {
-				CANOpenItemConfig config = provider.getItemConfig(itemName);
-			
-				config.sendCommand(command, logger);
-				return;
+		logger.trace("Received command (item='{}', command='{}')", itemName, command.toString());
+		if (!isEcho(itemName, command)) {
+			for (CANOpenBindingProvider provider : providers) {
+				if (provider.providesBindingFor(itemName)) {
+					CANOpenItemConfig config = provider.getItemConfig(itemName);
+				
+					config.sendCommand(command);
+					return;
+				}
 			}
 		}
 	}
@@ -138,17 +197,33 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 	 */
 	@Override
 	protected void internalReceiveUpdate(String itemName, State newState) {
-		logger.debug("internalReceiveUpdate() state = "+newState.toString());
-		for (CANOpenBindingProvider provider : providers) {
-			if (provider.providesBindingFor(itemName)) {
-				CANOpenItemConfig config = provider.getItemConfig(itemName);
-			
-				config.sendState(newState, logger);
-				return;
-			}
-		}
+		logger.debug("Received update (item='{}', state='{}')", itemName, newState.toString());
+		if (!isEcho(itemName, newState)) {
+			for (CANOpenBindingProvider provider : providers) {
+				if (provider.providesBindingFor(itemName)) {
+					CANOpenItemConfig config = provider.getItemConfig(itemName);
+				
+					config.sendState(newState);
+					return;
+				}
+			}		
+		} else
+			logger.debug("Not sending echo to bus");
 	}
 		
+	private boolean isEcho(String itemName, Type type) {
+		String ignoreEventListKey = itemName + type.toString();
+		if (ignoreEventList.contains(ignoreEventListKey)) {
+			ignoreEventList.remove(ignoreEventListKey);
+			logger.trace("We received this event (item='{}', state='{}') from KNX, so we don't send it back again -> ignore!", itemName, type.toString());
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	
 	/**
 	 * @{inheritDoc}
 	 */
@@ -163,23 +238,101 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 				refreshInterval = Long.parseLong(refreshIntervalString);
 			}
 			
-			// read further config parameters here ...
+			String sdoResponseTimeoutString = (String) config.get("sdo_timeout");
+			if (StringUtils.isNotBlank(sdoResponseTimeoutString)) {
+				sdoResponseTimeout = Integer.parseInt(sdoResponseTimeoutString);
+			}
+			String autoStartString = (String) config.get("auto_start_nodes");
+			if (StringUtils.isNotBlank(autoStartString)) {
+				autoStartNodes= new HashSet<Integer>();
+				String[] nodes = autoStartString.split(",");
+				for(String node: nodes) {
+					if(node.trim().toLowerCase().equals("all"))
+						autoStartAll= true;
+					
+					try {
+						autoStartNodes.add(Integer.decode(node));
+					} catch (NumberFormatException e) {
+					}
+				}
+			}
+			
+			String syncInterfaceString = (String) config.get("sync_master_for");
+			if (StringUtils.isNotBlank(syncInterfaceString)) {
+				if(syncInterfaceString.contains(","))
+					syncInterfaces.addAll(Arrays.asList(syncInterfaceString.split("\\s*,\\s*")));
+				else
+					syncInterfaces.add(syncInterfaceString.trim());					
+				logger.debug("Sync master for: " + syncInterfaces);
+			}
 
+			String syncMaxValString = (String) config.get("sync_max_val");
+			if (StringUtils.isNotBlank(syncMaxValString)) {
+				try {
+					syncMaxVal = Integer.parseInt(syncMaxValString);
+					if(syncMaxVal>255) syncMaxVal= 255;
+					if(syncMaxVal<0) syncMaxVal= 0;
+				} catch (NumberFormatException e) {
+					logger.error("Could not parse sync_max_val from string " + syncMaxValString);
+				}				
+			}
+			
 			setProperlyConfigured(true);
 		}
 	}
 
 	@Override
-	public void messageReceived(int canID, boolean rtr, byte[] data) {
-		logger.debug("messageReceived = "+canID+"."+rtr+"#"+Util.formatData(data));
-		// Process PDOs
+	public void messageReceived(int canID, boolean rtr, byte[] data, ISocketConnection canInterface) {
+		// logger.debug("Message received: = " + Util.canMessageToSting(canID, data));
 		if(!rtr) {
-			LinkedList<CANOpenItemConfig> pdoList= pdoConfigMap.get(canID);
-			if(pdoList!=null) {
-				ListIterator<CANOpenItemConfig> iterator= pdoList.listIterator();
-				while(iterator.hasNext()) {
-					CANOpenItemConfig config= iterator.next();
-					eventPublisher.postUpdate(config.getItemName(), config.pdoToState(data)); 
+			// Process NMT
+			if((canID & ~0x7F)==0x700) { // NMT error control (bootup and heart beat)
+				int deviceID= canID & 0x7F;
+				if((autoStartAll || autoStartNodes.contains(new Integer(deviceID))))
+					if(data.length>0 && data[0]!=5) {
+						byte[] msg= new byte[2];
+						msg[0]= 1; // C= start command
+						msg[1]= (byte)(deviceID); // node id
+						canInterface.send(new CanId(0), msg);
+					}
+				
+				CANOpenItemConfig config= nmtConfigMap.get(deviceID);
+				if(config!=null) {
+					String itemName= config.getItemName();
+					State s= config.nmtToState(data);
+					addIgnoreEvent(itemName, s);
+					eventPublisher.postUpdate(itemName, s);
+				}
+				
+				return;
+			}
+			// Process SDO
+			if((canID & ~0x7F)==0x580) {
+				if(data==null || data.length!=8) {
+					logger.error("Received SDO message with less than 8 data bytes: " + Util.canMessageToSting(canID, data));
+					return;
+				}
+				
+				int deviceID= canID & 0x7F;
+				SDODeviceManager manager= sdoDeviceManagerMap.get(deviceID);
+				if(manager!=null) {
+					manager.messageReceived(canID, rtr, data, canInterface);
+				} else
+					logger.warn("Couldn't find SDO handler for device " + deviceID);
+				
+				return;
+			} else {
+			// process PDO
+				LinkedList<CANOpenItemConfig> pdoList= pdoConfigMap.get(canID);
+				if(pdoList!=null) {
+					ListIterator<CANOpenItemConfig> iterator= pdoList.listIterator();
+					while(iterator.hasNext()) {
+						CANOpenItemConfig config= iterator.next();
+						String itemName= config.getItemName();
+						State s= config.pdoToState(data);
+						addIgnoreEvent(itemName, s);
+						eventPublisher.postUpdate(itemName, s); 
+					}
 				}
 			}
 		}
@@ -196,16 +349,8 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 
 		// the configuration is guaranteed not to be null, because the component definition has the
 		// configuration-policy set to require. If set to 'optional' then the configuration may be null
-		
-			
-		// to override the default refresh interval one has to add a 
-		// parameter to openhab.cfg like <bindingName>:refresh=<intervalInMs>
-		String refreshIntervalString = (String) configuration.get("refresh");
-		if (StringUtils.isNotBlank(refreshIntervalString)) {
-			refreshInterval = Long.parseLong(refreshIntervalString);
-		}
-
-		// read further config parameters here ...
+		logger.debug("Entering activate");
+		modified(configuration);
 
 		setProperlyConfigured(true);
 	}
@@ -215,7 +360,54 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 	 * @param configuration Updated configuration properties
 	 */
 	public void modified(final Map<String, Object> configuration) {
-		// update the internal configuration accordingly
+		// to override the default refresh interval one has to add a 
+		// parameter to openhab.cfg like <bindingName>:refresh=<intervalInMs>
+		String refreshIntervalString = (String) configuration.get("refresh");
+		if (StringUtils.isNotBlank(refreshIntervalString)) {
+			refreshInterval = Long.parseLong(refreshIntervalString);
+		}
+
+		String sdoResponseTimeoutString = (String) configuration.get("sdo_timeout");
+		if (StringUtils.isNotBlank(sdoResponseTimeoutString)) {
+			sdoResponseTimeout = Integer.parseInt(sdoResponseTimeoutString);
+		}
+
+		String autoStartString = (String) configuration.get("auto_start_nodes");
+		if (StringUtils.isNotBlank(autoStartString)) {
+			autoStartNodes= new HashSet<Integer>();
+			String[] nodes = autoStartString.split(",");
+			for(String node: nodes) {
+				if(node.trim().toLowerCase().equals("all"))
+					autoStartAll= true;
+				
+				try {
+					autoStartNodes.add(Integer.decode(node));
+				} catch (NumberFormatException e) {
+				}
+			}
+		}
+
+		String syncInterfaceString = (String) configuration.get("sync_master_for");
+		if (StringUtils.isNotBlank(syncInterfaceString)) {
+			if(syncInterfaceString.contains(","))
+				syncInterfaces.addAll(Arrays.asList(syncInterfaceString.split("\\s*,\\s*")));
+			else
+				syncInterfaces.add(syncInterfaceString.trim());
+			
+			logger.debug("Sync master for: " + syncInterfaces);
+		}
+
+		String syncMaxValString = (String) configuration.get("sync_max_val");
+		if (StringUtils.isNotBlank(syncMaxValString)) {
+			try {
+				syncMaxVal = Integer.parseInt(syncMaxValString);
+				if(syncMaxVal>255) syncMaxVal= 255;
+				if(syncMaxVal<0) syncMaxVal= 0;
+			} catch (NumberFormatException e) {
+				logger.error("Could not parse sync_max_val from string " + syncMaxValString);
+			}				
+		}
+		
 	}
 	
 	/**
@@ -260,7 +452,34 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 	 */
 	@Override
 	protected void execute() {
-		// the frequently executed code (polling) goes here ...
-//		logger.debug("execute() method is called!");
+		for(SDODeviceManager manager: sdoDeviceManagerMap.values()) {
+			manager.refresh();
+		}
+		if(syncInterfaces.size()>0) {
+			byte[] data= null;
+			if(syncMaxVal>0) {
+				if(++syncVal>=syncMaxVal) syncVal= 0;
+				data= new byte[] {(byte)syncVal};
+			}
+			for(String syncInterfaceId: syncInterfaces) {
+					ISocketConnection connection = CANOpenActivator.getConnection(syncInterfaceId);
+				try {
+					connection.open(); // TODO open always necessary ?
+				} catch (Exception e) {
+					logger.error("Error opening the connection " + syncInterfaceId);
+				}
+				connection.send(new CanId(0x80), data);
+			}
+		}
+	}
+	
+	public void postUpdate(String itemName, State s) {
+		logger.debug("Publishing update to " + itemName + " data: " + s);
+		addIgnoreEvent(itemName, s);
+		eventPublisher.postUpdate(itemName, s);
+	}
+	
+	public void addIgnoreEvent(String itemName, State s) {
+		ignoreEventList.add(itemName + s.toString());
 	}
 }
