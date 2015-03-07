@@ -1,0 +1,78 @@
+rule CopyCANopenTest_bool
+when
+    Item TCANopenTest_bool received update
+then
+    postUpdate(RCANopenTest_bool, TCANopenTest_bool.state)
+    postUpdate(SDOCANopenTest_boolean, TCANopenTest_bool.state)
+end
+
+rule CANopenTest_int8
+when
+    Item TCANopenTest_int8 received update
+then
+    postUpdate(RCANopenTest_int8, TCANopenTest_int8.state)
+    sendCommand(SDOCANopenTest_int8, TCANopenTest_int8.state)
+end
+
+rule CANopenTest_uint8
+when
+    Item TCANopenTest_uint8 received update
+then
+    postUpdate(RCANopenTest_uint8, TCANopenTest_uint8.state);
+end
+
+rule CANopenTest_int16
+when
+    Item TCANopenTest_int16 received update
+then
+    postUpdate(RCANopenTest_int16, TCANopenTest_int16.state);
+end
+
+rule CANopenTest_uint16
+when
+    Item TCANopenTest_uint16 received update
+then
+    postUpdate(RCANopenTest_uint16, TCANopenTest_uint16.state);
+end
+rule CANopenTest_int24
+when
+    Item TCANopenTest_int24 received update
+then
+    postUpdate(RCANopenTest_int24, TCANopenTest_int24.state);
+end
+rule CANopenTest_uint24
+when
+    Item TCANopenTest_uint24 received update
+then
+    postUpdate(RCANopenTest_uint24, TCANopenTest_uint24.state);
+end
+rule CANopenTest_int32
+when
+    Item TCANopenTest_int32 received update
+then
+    postUpdate(RCANopenTest_int32, TCANopenTest_int32.state);
+end
+rule CANopenTest_uint32
+when
+    Item TCANopenTest_uint32 received update
+then
+    postUpdate(RCANopenTest_uint32, TCANopenTest_uint32.state);
+end
+rule CANopenTest_int64
+when
+    Item TCANopenTest_int64 received update
+then
+    postUpdate(RCANopenTest_int64, TCANopenTest_int64.state);
+end
+rule CANopenTest_real32
+when
+    Item TCANopenTest_real32 received update
+then
+    postUpdate(RCANopenTest_real32, TCANopenTest_real32.state);
+end
+rule CANopenTest_real64
+when
+    Item TCANopenTest_real64 received update
+then
+    postUpdate(RCANopenTest_real64, TCANopenTest_real64.state);
+end
