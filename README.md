@@ -1,11 +1,11 @@
 # CANopen Binding for openHAB
-This is the very second version of a Binding that allows the connection of [CANopen](http://en.wikipedia.org/wiki/CANopen) devices to the [openHAB server](http://www.openhab.org/) via a [socket can connection](http://en.wikipedia.org/wiki/SocketCAN).
+This is the second version of a Binding that allows the connection of [CANopen](http://en.wikipedia.org/wiki/CANopen) devices to the [openHAB server](http://www.openhab.org/) via a [socket can connection](http://en.wikipedia.org/wiki/SocketCAN).
 
 The code was originally founded upon and partly copied from this [socket can binding](https://github.com/agriesser/socketcan-binding-lager) but has evolved quite a bit since.
 
 # News on 2015/03/06
 * The lib-socketcan-java.jar needed to access the system CAN bus driver was moved to a separate bundle hosted [here](https://github.com/jgeisler0303/openHAB_io_canbus). You must download or clone this bundle and import the project contained therein into eclipse or create a bundle .jar and copy that into the addons folder of your openHAB installation!!!
-* Implemented full support for pdos, sdo (expedited only), nmt, sync
+* Implemented full support for PDOs (Tx and Rx), SDOs (expedited only), NMT heartbeat (with auto start), sync master
 * Implemented support for all numeric CANopen data types (no strings yet)
 * Started implementing tests
 
@@ -37,9 +37,9 @@ For testing the PDO and SDO functionality, copy the item and rules files from th
 ```
 Now start openHAB with the CANopen and ```org.openhab.io.transport.socketcan``` bundles set to autostart.
 
-Upon loading the ```SDOCANopenTest_boolean``` item will be queried for the current device value and the fake testing socket will reply with a valid response. Then, after 10 seconds the fake testing socket will start sending transmit PDO messages, about five to siy different values for each data type (as configured in the item file). The test rules will then copy the received values to receive PDO items and the fake testing socket will log their correct reception. Also, the first two PDOs are copied to the configured SDO items and the fake testing socket will resond to the SDO write messages sent there upon.
+Upon loading the ```SDOCANopenTest_boolean``` item will be queried for the current device value and the fake testing socket will reply with a valid response. Then, after 10 seconds the fake testing socket will start sending transmit PDO messages, about five to six different values for each data type (as configured in the item file). The test rules will then copy the received values to receive PDO items and the fake testing socket will log their correct reception. Also, the first two PDOs are copied to the configured SDO items and the fake testing socket will resond to the SDO write messages sent there upon.
 
-You all the test are not driectily logged as success or failure like a ture unit test. But you can watch and interpret test results and going-ons in the specially generated ```TestCANopen.log``` file in you openHABs log folder.
+All the test are not directly logged as "success" or "failure" like a true unit test. But you can watch and interpret the test results and going-ons in the specially generated ```TestCANopen.log``` file in you openHABs log folder.
 
 # Future Plans
 Given enough time, I plan to improve this binding like this:
