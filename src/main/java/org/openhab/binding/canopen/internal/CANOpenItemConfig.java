@@ -566,7 +566,7 @@ public class CANOpenItemConfig implements BindingConfig {
 	private String itemName;
 	private CANOpenDataType dataType= null;
 	private int deviceID= -1;
-	private int txCOB_ID= -1;
+	private int txCOB_ID= -1;	// TODO add RTR capability
 	private int txDataOffset= -1;
 	private int rxCOD_ID= -1;
 	private int odIndex= -1;

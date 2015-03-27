@@ -69,7 +69,7 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 	 */
 	private long refreshInterval = 60000;
 	private boolean autoStartAll= false;
-	private Set<Integer> autoStartNodes= null;
+	private Set<Integer> autoStartNodes= new HashSet<Integer>();
 
 	private int sdoResponseTimeout= 1000;
 	private Set<String> syncInterfaces= new HashSet<String>();
@@ -233,18 +233,22 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 			
 			// to override the default refresh interval one has to add a 
 			// parameter to openhab.cfg like <bindingName>:refresh=<intervalInMs>
+			refreshInterval= 60000;
 			String refreshIntervalString = (String) config.get("refresh");
 			if (StringUtils.isNotBlank(refreshIntervalString)) {
 				refreshInterval = Long.parseLong(refreshIntervalString);
 			}
 			
+			sdoResponseTimeout= 1000;
 			String sdoResponseTimeoutString = (String) config.get("sdo_timeout");
 			if (StringUtils.isNotBlank(sdoResponseTimeoutString)) {
 				sdoResponseTimeout = Integer.parseInt(sdoResponseTimeoutString);
 			}
+			
+			autoStartNodes.clear();
+			autoStartAll= false;
 			String autoStartString = (String) config.get("auto_start_nodes");
 			if (StringUtils.isNotBlank(autoStartString)) {
-				autoStartNodes= new HashSet<Integer>();
 				String[] nodes = autoStartString.split(",");
 				for(String node: nodes) {
 					if(node.trim().toLowerCase().equals("all"))
@@ -257,6 +261,7 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 				}
 			}
 			
+			syncInterfaces.clear();
 			String syncInterfaceString = (String) config.get("sync_master_for");
 			if (StringUtils.isNotBlank(syncInterfaceString)) {
 				if(syncInterfaceString.contains(","))
@@ -266,6 +271,7 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 				logger.debug("Sync master for: " + syncInterfaces);
 			}
 
+			syncMaxVal= 0;
 			String syncMaxValString = (String) config.get("sync_max_val");
 			if (StringUtils.isNotBlank(syncMaxValString)) {
 				try {
@@ -363,18 +369,21 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 		// to override the default refresh interval one has to add a 
 		// parameter to openhab.cfg like <bindingName>:refresh=<intervalInMs>
 		String refreshIntervalString = (String) configuration.get("refresh");
+		refreshInterval= 60000;
 		if (StringUtils.isNotBlank(refreshIntervalString)) {
 			refreshInterval = Long.parseLong(refreshIntervalString);
 		}
 
 		String sdoResponseTimeoutString = (String) configuration.get("sdo_timeout");
+		sdoResponseTimeout= 1000;
 		if (StringUtils.isNotBlank(sdoResponseTimeoutString)) {
 			sdoResponseTimeout = Integer.parseInt(sdoResponseTimeoutString);
 		}
 
+		autoStartNodes.clear();
+		autoStartAll= false;
 		String autoStartString = (String) configuration.get("auto_start_nodes");
 		if (StringUtils.isNotBlank(autoStartString)) {
-			autoStartNodes= new HashSet<Integer>();
 			String[] nodes = autoStartString.split(",");
 			for(String node: nodes) {
 				if(node.trim().toLowerCase().equals("all"))
@@ -387,6 +396,7 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 			}
 		}
 
+		syncInterfaces.clear();
 		String syncInterfaceString = (String) configuration.get("sync_master_for");
 		if (StringUtils.isNotBlank(syncInterfaceString)) {
 			if(syncInterfaceString.contains(","))
@@ -397,6 +407,7 @@ public class CANOpenBinding extends AbstractActiveBinding<CANOpenBindingProvider
 			logger.debug("Sync master for: " + syncInterfaces);
 		}
 
+		syncMaxVal= 0;
 		String syncMaxValString = (String) configuration.get("sync_max_val");
 		if (StringUtils.isNotBlank(syncMaxValString)) {
 			try {
