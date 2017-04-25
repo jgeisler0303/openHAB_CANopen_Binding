@@ -1,3 +1,4 @@
+# This Project is no longer maintained. Please see if this might be an alternative for you: https://github.com/jgeisler0303/can2mqtt
 # CANopen Binding for openHAB
 This is the second version of a Binding that allows the connection of [CANopen](http://en.wikipedia.org/wiki/CANopen) devices to the [openHAB server](http://www.openhab.org/) via a [socket can connection](http://en.wikipedia.org/wiki/SocketCAN).
 
